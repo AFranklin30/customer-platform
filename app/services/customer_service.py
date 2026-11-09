@@ -52,6 +52,7 @@ class CustomerService:
         data: CustomerCreate,
         idempotency_key: str | None,
     ) -> CreateCustomerResult:
+        # Reject a missing key before opening the create transaction.
         key = validate_idempotency_key(idempotency_key)
         try:
             return self._create_customer(data, key)
@@ -64,20 +65,17 @@ class CustomerService:
     def _create_customer(
         self,
         data: CustomerCreate,
-        key: str | None,
+        key: str,
     ) -> CreateCustomerResult:
         request_hash = canonical_request_hash(data)
-        record: IdempotencyKey | None = None
-
-        if key is not None:
-            record = IdempotencyKey(idempotency_key=key, request_hash=request_hash)
-            try:
-                self._idempotency.add(record)
-            except IntegrityError as exc:
-                self._session.rollback()
-                if _constraint_name(exc) != _IDEMPOTENCY_KEY_CONSTRAINT:
-                    raise
-                return self._replay(key, request_hash)
+        record = IdempotencyKey(idempotency_key=key, request_hash=request_hash)
+        try:
+            self._idempotency.add(record)
+        except IntegrityError as exc:
+            self._session.rollback()
+            if _constraint_name(exc) != _IDEMPOTENCY_KEY_CONSTRAINT:
+                raise
+            return self._replay(key, request_hash)
 
         customer = Customer(
             email=data.email,
@@ -95,9 +93,8 @@ class CustomerService:
             raise
 
         body = CustomerRead.model_validate(customer)
-        if record is not None:
-            record.response_code = 201
-            record.response_body = body.model_dump(mode="json")
+        record.response_code = 201
+        record.response_body = body.model_dump(mode="json")
 
         self._session.commit()
         logger.info("customer_created customer_id=%s", customer.id)

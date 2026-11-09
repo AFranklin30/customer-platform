@@ -35,7 +35,7 @@ Assumptions, because these fields were not specified earlier:
 - `Ada@Example.com` and `ada@example.com` are the same customer.
 - Internationalized email addresses are rejected.
 - Address, status, and an external account id are deferred.
-- `POST /customers` works without an idempotency key. Clients that retry should send one.
+- `POST /customers` requires an `Idempotency-Key` header. A missing or blank key is rejected and stores nothing.
 
 ## Idempotency
 
@@ -78,7 +78,7 @@ Validation errors use the same envelope and include `details`.
 | Status | Code | When |
 | --- | --- | --- |
 | 201 |  | Customer created, or an idempotent retry of that create |
-| 400 | `invalid_idempotency_key` | Header is empty, too long, or not visible ASCII |
+| 400 | `invalid_idempotency_key` | Header is missing, blank, too long, or not visible ASCII |
 | 409 | `duplicate_email` | Email already exists |
 | 409 | `idempotency_payload_conflict` | Key reused with a different payload |
 | 409 | `idempotency_in_progress` | Key exists without a stored response |

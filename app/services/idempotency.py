@@ -19,11 +19,11 @@ from app.services.exceptions import InvalidIdempotencyKeyError
 _IDEMPOTENCY_KEY = re.compile(r"[\x21-\x7E]{1,255}")
 
 
-def validate_idempotency_key(idempotency_key: str | None) -> str | None:
-    """Return a cleaned key, or None when the caller did not send one."""
+def validate_idempotency_key(idempotency_key: str | None) -> str:
+    """Return a cleaned key. A missing or blank key is rejected."""
 
     if idempotency_key is None:
-        return None
+        raise InvalidIdempotencyKeyError
     cleaned = idempotency_key.strip()
     if _IDEMPOTENCY_KEY.fullmatch(cleaned) is None:
         raise InvalidIdempotencyKeyError

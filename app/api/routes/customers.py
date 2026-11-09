@@ -18,13 +18,13 @@ router = APIRouter(tags=["customers"])
     status_code=status.HTTP_201_CREATED,
     summary="Create a customer",
     description=(
-        "Creates a customer. Email is unique. When Idempotency-Key is sent, "
-        "a retry of the same payload returns the original customer and sets "
-        "Idempotency-Replayed: true. Reusing the key with a different payload "
-        "returns 409 and does not create another customer."
+        "Creates a customer. Idempotency-Key is required. Email is unique. "
+        "A retry of the same key and payload returns the original customer and "
+        "sets Idempotency-Replayed: true. Reusing the key with a different "
+        "payload returns 409 and does not create another customer."
     ),
     responses={
-        400: {"model": ErrorResponse, "description": "The idempotency key is malformed."},
+        400: {"model": ErrorResponse, "description": "The idempotency key is missing or malformed."},
         409: {
             "model": ErrorResponse,
             "description": "Duplicate email, idempotency payload conflict, or unfinished key.",

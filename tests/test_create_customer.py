@@ -27,6 +27,10 @@ def client() -> TestClient:
         yield test_client
 
 
+def key_headers(key: str) -> dict[str, str]:
+    return {"Idempotency-Key": key}
+
+
 def customer_body(**overrides: object) -> dict[str, object]:
     body: dict[str, object] = {
         "email": "ada@example.com",
@@ -49,7 +53,7 @@ def idempotency_count() -> int:
 
 
 def test_create_customer_persists_and_returns_201(client: TestClient) -> None:
-    response = client.post("/customers", json=customer_body())
+    response = client.post("/customers", json=customer_body(), headers=key_headers("persist-ada"))
 
     assert response.status_code == 201
     body = response.json()
@@ -70,7 +74,7 @@ def test_create_customer_persists_and_returns_201(client: TestClient) -> None:
 
 
 def test_missing_required_fields(client: TestClient) -> None:
-    response = client.post("/customers", json={})
+    response = client.post("/customers", json={}, headers=key_headers("missing-fields"))
 
     assert response.status_code == 422
     error = response.json()["error"]
@@ -83,7 +87,11 @@ def test_missing_required_fields(client: TestClient) -> None:
 
 
 def test_invalid_email(client: TestClient) -> None:
-    response = client.post("/customers", json=customer_body(email="not-an-email"))
+    response = client.post(
+        "/customers",
+        json=customer_body(email="not-an-email"),
+        headers=key_headers("invalid-email"),
+    )
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
@@ -91,7 +99,11 @@ def test_invalid_email(client: TestClient) -> None:
 
 
 def test_invalid_phone(client: TestClient) -> None:
-    response = client.post("/customers", json=customer_body(phone="123"))
+    response = client.post(
+        "/customers",
+        json=customer_body(phone="123"),
+        headers=key_headers("invalid-phone"),
+    )
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
@@ -99,25 +111,41 @@ def test_invalid_phone(client: TestClient) -> None:
 
 
 def test_blank_name_is_rejected(client: TestClient) -> None:
-    response = client.post("/customers", json=customer_body(first_name="   "))
+    response = client.post(
+        "/customers",
+        json=customer_body(first_name="   "),
+        headers=key_headers("blank-name"),
+    )
 
     assert response.status_code == 422
     assert customer_count() == 0
 
 
 def test_unknown_field_is_rejected(client: TestClient) -> None:
-    response = client.post("/customers", json=customer_body(nickname="A"))
+    response = client.post(
+        "/customers",
+        json=customer_body(nickname="A"),
+        headers=key_headers("unknown-field"),
+    )
 
     assert response.status_code == 422
     assert customer_count() == 0
 
 
 def test_duplicate_email_conflict(client: TestClient) -> None:
-    assert client.post("/customers", json=customer_body()).status_code == 201
+    assert (
+        client.post(
+            "/customers",
+            json=customer_body(),
+            headers=key_headers("duplicate-email-1"),
+        ).status_code
+        == 201
+    )
 
     response = client.post(
         "/customers",
         json=customer_body(first_name="Augusta"),
+        headers=key_headers("duplicate-email-2"),
     )
 
     assert response.status_code == 409
@@ -126,11 +154,19 @@ def test_duplicate_email_conflict(client: TestClient) -> None:
 
 
 def test_duplicate_email_is_case_insensitive(client: TestClient) -> None:
-    created = client.post("/customers", json=customer_body(email="Ada@Example.com"))
+    created = client.post(
+        "/customers",
+        json=customer_body(email="Ada@Example.com"),
+        headers=key_headers("duplicate-case-1"),
+    )
     assert created.status_code == 201
     assert created.json()["email"] == "ada@example.com"
 
-    duplicate = client.post("/customers", json=customer_body(email="ADA@example.com"))
+    duplicate = client.post(
+        "/customers",
+        json=customer_body(email="ADA@example.com"),
+        headers=key_headers("duplicate-case-2"),
+    )
 
     assert duplicate.status_code == 409
     assert duplicate.json()["error"]["code"] == "duplicate_email"
@@ -177,6 +213,25 @@ def test_idempotency_key_with_different_payload_conflicts(client: TestClient) ->
         stored = session.scalar(select(Customer))
         assert stored is not None
         assert stored.first_name == "Ada"
+
+
+def test_missing_idempotency_key_creates_nothing(client: TestClient) -> None:
+    response = client.post("/customers", json=customer_body())
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_idempotency_key"
+    assert customer_count() == 0
+    assert idempotency_count() == 0
+
+
+@pytest.mark.parametrize("key", ["", "   "])
+def test_blank_idempotency_key_creates_nothing(client: TestClient, key: str) -> None:
+    response = client.post("/customers", json=customer_body(), headers={"Idempotency-Key": key})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_idempotency_key"
+    assert customer_count() == 0
+    assert idempotency_count() == 0
 
 
 def test_invalid_idempotency_key_does_not_create_a_customer(client: TestClient) -> None:
@@ -339,7 +394,7 @@ def test_concurrent_duplicate_email_creates_one_customer() -> None:
             phone=None,
         )
         with SessionLocal() as session:
-            return CustomerService(session).create_customer(payload, None)
+            return CustomerService(session).create_customer(payload, f"shared-email-{index}")
 
     results, errors = _run_together(8, attempt)
 
@@ -347,7 +402,7 @@ def test_concurrent_duplicate_email_creates_one_customer() -> None:
     assert len(errors) == 7
     assert all(isinstance(error, DuplicateEmailError) for error in errors)
     assert customer_count() == 1
-    assert idempotency_count() == 0
+    assert idempotency_count() == 1
 
 
 def test_concurrent_same_email_with_different_keys_keeps_one_record() -> None:

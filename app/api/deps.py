@@ -25,14 +25,14 @@ def get_idempotency_key(
         str | None,
         Header(
             description=(
-                "Optional retry key. The same key and payload return the original "
+                "Required retry key. The same key and payload return the original "
                 "customer. The same key with a different payload returns 409."
             )
         ),
     ] = None,
-) -> str | None:
+) -> str:
     return validate_idempotency_key(idempotency_key)
 
 
 DbSession = Annotated[Session, Depends(get_db)]
-IdempotencyKeyHeader = Annotated[str | None, Depends(get_idempotency_key)]
+IdempotencyKeyHeader = Annotated[str, Depends(get_idempotency_key)]

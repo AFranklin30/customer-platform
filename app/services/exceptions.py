@@ -6,7 +6,7 @@ class DuplicateEmailError(Exception):
 
 
 class InvalidIdempotencyKeyError(Exception):
-    """The Idempotency-Key header is present but not usable."""
+    """The Idempotency-Key header is missing or not usable."""
 
 
 class IdempotencyConflictError(Exception):
