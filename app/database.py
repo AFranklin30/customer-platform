@@ -28,8 +28,11 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
+database_url = settings.database_url
+if database_url is None:
+    raise RuntimeError("Database configuration is incomplete.")
 engine = create_engine(
-    settings.database_url,
+    database_url,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,

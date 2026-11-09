@@ -1,0 +1,66 @@
+# Local application stack. PostgreSQL is reachable only on the Compose network.
+# The named volume keeps customer rows across API and stack restarts.
+# `docker compose down` keeps the volume. `docker compose down -v` deletes it.
+
+name: customer-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-customer}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-customer_dev_password}"
+      POSTGRES_DB: "${POSTGRES_DB:-customer_platform}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    image: customer-platform:local
+    command: ["alembic", "upgrade", "head"]
+    environment: &database_environment
+      POSTGRES_USER: "${POSTGRES_USER:-customer}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-customer_dev_password}"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "${POSTGRES_DB:-customer_platform}"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    image: customer-platform:local
+    environment: *database_environment
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

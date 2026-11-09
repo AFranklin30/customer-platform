@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 from app.api.errors import register_exception_handlers
 from app.api.routes.customers import router as customers_router
+from app.api.routes.health import router as health_router
 from app.config import get_settings
 from app.logging_config import configure_logging
 
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     register_exception_handlers(app)
+    app.include_router(health_router)
     app.include_router(customers_router)
     return app
 

@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.pool import NullPool
 
@@ -33,8 +34,14 @@ def _resolve_test_database_url() -> str:
 
     user = os.environ.get("PGUSER", getpass.getuser())
     host = os.environ.get("PGHOST", "localhost")
-    port = os.environ.get("PGPORT", "5432")
-    return f"postgresql+psycopg://{user}@{host}:{port}/customer_platform_test"
+    port = int(os.environ.get("PGPORT", "5432"))
+    return URL.create(
+        drivername="postgresql+psycopg",
+        username=user,
+        host=host,
+        port=port,
+        database="customer_platform_test",
+    ).render_as_string(hide_password=False)
 
 
 def _ensure_database(url: str) -> None:

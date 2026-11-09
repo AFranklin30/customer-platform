@@ -1,6 +1,6 @@
 # Customer API
 
-Initial backend for creating customers. The application is FastAPI, SQLAlchemy 2, and PostgreSQL. Docker, Kubernetes, and AWS are intentionally not part of this version.
+Initial backend for creating customers. The application is FastAPI, SQLAlchemy 2, and PostgreSQL. Local Docker Compose runs PostgreSQL, Alembic, and the API. Kubernetes and AWS are not part of this version.
 
 ## Architecture
 
@@ -83,6 +83,8 @@ Validation errors use the same envelope and include `details`.
 | 409 | `idempotency_payload_conflict` | Key reused with a different payload |
 | 409 | `idempotency_in_progress` | Key exists without a stored response |
 | 422 | `validation_error` | Body failed Pydantic validation |
+| 200 |  | `GET /health` and the database accepted a connection |
+| 503 |  | `GET /health` could not reach the database. The body is `status` and `database`, both `unavailable` |
 | 500 | `internal_error` | Unexpected failure; the transaction is rolled back |
 
 Unexpected failures are logged with a stack trace. The client receives a fixed message, not the exception text.
@@ -108,6 +110,27 @@ uvicorn app.main:app --reload
 
 Interactive docs are at `http://127.0.0.1:8000/docs`.
 
+## Docker Compose
+
+Compose runs three services on one network: `postgres`, `migrate`, and `api`. The containers receive `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST=postgres`, `POSTGRES_PORT`, and `POSTGRES_DB`. They do not receive the host `DATABASE_URL`. The application builds its connection URL with SQLAlchemy's `URL.create`, which encodes the password. PostgreSQL is not published on the host, so it does not share port 5432 with a local development database. Customer rows live in the named volume `postgres_data`.
+
+```bash
+docker compose build
+docker compose up -d
+docker compose ps
+docker compose logs migrate
+```
+
+Stop the containers and keep the database volume:
+
+```bash
+docker compose down
+```
+
+`docker compose down -v` deletes that volume and the customer rows in it.
+
+`GET /health` returns `{"status":"ok","database":"ok"}` when the process can run `SELECT 1`. It does not return the database URL.
+
 ## Tests
 
 Pytest applies `alembic upgrade head` to a database whose name ends with `_test` (default `customer_platform_test`) and truncates tables around each test. It will not run against a database that does not end with `_test`.
@@ -131,7 +154,7 @@ Database-enforced rules:
 
 ## Limitations
 
-- Create is the only customer endpoint. There is no read, update, or delete.
+- Customer writes are create-only. There is no read, update, or delete for a customer. `GET /health` only reports process and database reachability.
 - `updated_at` changes only when an update path exists.
 - Idempotency keys are not expired or deleted.
 - The API does not authenticate callers.
