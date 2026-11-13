@@ -76,3 +76,17 @@ class CustomerRead(BaseModel):
     phone: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class CustomerPage(BaseModel):
+    """One page of customers.
+
+    items uses the same fields as a single customer response. total is the
+    number of customers, not the number of rows in this page. limit and offset
+    echo the request so a client can request the next page.
+    """
+
+    items: list[CustomerRead]
+    limit: int
+    offset: int
+    total: int

@@ -15,3 +15,7 @@ class IdempotencyConflictError(Exception):
 
 class IdempotencyInProgressError(Exception):
     """The key exists, but no completed response has been stored."""
+
+
+class CustomerNotFoundError(Exception):
+    """No customer exists for the requested id."""

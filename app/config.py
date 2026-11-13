@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.database_url import build_database_url
+
+_DEFAULT_CORS_ORIGINS = "http://127.0.0.1:5173,http://localhost:5173"
 
 
 class Settings(BaseSettings):
@@ -23,6 +26,7 @@ class Settings(BaseSettings):
 
     database_url: str | None = None
     log_level: str = "INFO"
+    cors_origins: str = _DEFAULT_CORS_ORIGINS
     postgres_user: str | None = None
     postgres_password: str | None = None
     postgres_host: str | None = None
@@ -91,6 +95,29 @@ class Settings(BaseSettings):
         if normalized not in logging.getLevelNamesMapping():
             raise ValueError(f"LOG_LEVEL must be a Python logging level, got {value!r}.")
         return normalized
+
+    @field_validator("cors_origins")
+    @classmethod
+    def cors_origins_must_be_an_allowlist(cls, value: str) -> str:
+        origins = [item.strip() for item in value.split(",")]
+        if not origins or any(origin == "" for origin in origins):
+            raise ValueError("CORS_ORIGINS must be a comma-separated list of origins.")
+        if any("*" in origin for origin in origins):
+            raise ValueError("CORS_ORIGINS must not use a wildcard origin.")
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or parsed.netloc == ""
+                or parsed.path not in {"", "/"}
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError(f"CORS_ORIGINS entry must be an http(s) origin, got {origin!r}.")
+        return ",".join(origin.rstrip("/") for origin in origins)
+
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache

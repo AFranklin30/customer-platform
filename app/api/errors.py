@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.services.exceptions import (
+    CustomerNotFoundError,
     DuplicateEmailError,
     IdempotencyConflictError,
     IdempotencyInProgressError,
@@ -32,6 +33,7 @@ def error_json(
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(CustomerNotFoundError, _customer_not_found)
     app.add_exception_handler(DuplicateEmailError, _duplicate_email)
     app.add_exception_handler(IdempotencyConflictError, _idempotency_conflict)
     app.add_exception_handler(IdempotencyInProgressError, _idempotency_in_progress)
@@ -39,6 +41,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(HTTPException, _http_error)
     app.add_exception_handler(Exception, _unhandled)
+
+
+async def _customer_not_found(request: Request, exc: Exception) -> JSONResponse:
+    return error_json(404, "customer_not_found", "Customer not found.")
 
 
 async def _duplicate_email(request: Request, exc: Exception) -> JSONResponse:

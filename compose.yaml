@@ -41,8 +41,9 @@ services:
     build: .
     image: customer-platform:local
     environment: *database_environment
+    # Localhost only until callers are authenticated.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy

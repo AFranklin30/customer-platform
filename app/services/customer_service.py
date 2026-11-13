@@ -11,6 +11,7 @@ Nothing about this state is stored in process memory.
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
@@ -20,8 +21,9 @@ from app.models.customer import Customer
 from app.models.idempotency import IdempotencyKey
 from app.repositories.customer_repository import CustomerRepository
 from app.repositories.idempotency_repository import IdempotencyRepository
-from app.schemas.customer import CustomerCreate, CustomerRead
+from app.schemas.customer import CustomerCreate, CustomerPage, CustomerRead
 from app.services.exceptions import (
+    CustomerNotFoundError,
     DuplicateEmailError,
     IdempotencyConflictError,
     IdempotencyInProgressError,
@@ -46,6 +48,21 @@ class CustomerService:
         self._session = session
         self._customers = CustomerRepository(session)
         self._idempotency = IdempotencyRepository(session)
+
+    def get_customer(self, customer_id: uuid.UUID) -> CustomerRead:
+        customer = self._customers.get_by_id(customer_id)
+        if customer is None:
+            raise CustomerNotFoundError
+        return CustomerRead.model_validate(customer)
+
+    def list_customers(self, *, limit: int, offset: int) -> CustomerPage:
+        rows, total = self._customers.list_page(limit=limit, offset=offset)
+        return CustomerPage(
+            items=[CustomerRead.model_validate(row) for row in rows],
+            limit=limit,
+            offset=offset,
+            total=total,
+        )
 
     def create_customer(
         self,
